@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from .core_client import CoreClient, CoreContractError, CoreResult
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+READINESS_OBJECT_ID = "SYS-0003"
 
 
 def _error(code: str, message: str, status_code: int) -> JSONResponse:
@@ -86,9 +87,10 @@ def create_app(*, core_base_url: str | None = None, core_client: CoreClient | No
 
     @app.get("/readyz")
     def readyz() -> JSONResponse:
-        result = core_client.health()
+        result = core_client.object_detail(READINESS_OBJECT_ID)
         if result.status_code != 200:
             return _error("dependency_unavailable", "Shaka Core unavailable", 503)
+        _validate_success(result.payload, expected_type="system", expected_id=READINESS_OBJECT_ID)
         return JSONResponse({"service": "shaka-server", "status": "ready"})
 
     @app.get("/api/v1/asset-instances/{public_id}")

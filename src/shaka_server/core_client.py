@@ -42,9 +42,6 @@ class CoreClient:
             raise CoreContractError("malformed_core_response")
         return CoreResult(response.status_code, payload)
 
-    def health(self) -> CoreResult:
-        return self._get("/healthz")
-
     def asset_instance_detail(self, public_id: str) -> CoreResult:
         return self._get(f"/api/v1/asset-instances/{public_id}")
 
