@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from shaka_server.app import create_app
@@ -29,7 +30,10 @@ SYSTEM = {
     "data": {"id": "SYS-0003", "type": "system"},
     "meta": {"schemaVersion": "1.0"},
 }
-NOT_FOUND = {"error": {"code": "not_found", "message": "not found"}}
+
+
+def error_payload(status: int) -> dict[str, object]:
+    return {"error": {"code": f"core_{status}", "message": "bounded Core error"}}
 
 
 class FakeCore:
@@ -45,10 +49,13 @@ class FakeCore:
 
     def asset_instance_detail(self, public_id: str) -> CoreResult:
         self.calls.append(("detail", public_id))
-        if self.mode == "404":
-            return CoreResult(404, NOT_FOUND)
+        if self.mode in {"400", "404", "409", "503"}:
+            status = int(self.mode)
+            return CoreResult(status, error_payload(status))
         if self.mode == "malformed":
             return CoreResult(200, {"data": {"type": "asset_instance"}})
+        if self.mode == "timeout":
+            raise CoreContractError("core_unavailable")
         return CoreResult(200, DETAIL)
 
     def graph(self, public_id: str) -> CoreResult:
@@ -109,12 +116,13 @@ def test_graph_requires_exact_depth_one() -> None:
     assert fake.calls == []
 
 
-def test_core_404_remains_bounded_not_found() -> None:
+@pytest.mark.parametrize("status", [400, 404, 409, 503])
+def test_bounded_core_errors_are_mapped_deterministically(status: int) -> None:
     fake = FakeCore()
-    fake.mode = "404"
-    response = client_for(fake).get("/api/v1/asset-instances/UNKNOWN")
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "not_found"
+    fake.mode = str(status)
+    response = client_for(fake).get("/api/v1/asset-instances/AI-D4-BB-SeaWaterPump")
+    assert response.status_code == status
+    assert response.json()["error"]["code"] == f"core_{status}"
 
 
 def test_malformed_core_payload_fails_closed() -> None:
@@ -123,6 +131,14 @@ def test_malformed_core_payload_fails_closed() -> None:
     response = client_for(fake).get("/api/v1/asset-instances/AI-D4-BB-SeaWaterPump")
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "dependency_contract_violation"
+
+
+def test_core_timeout_is_bounded_unavailable() -> None:
+    fake = FakeCore()
+    fake.mode = "timeout"
+    response = client_for(fake).get("/api/v1/asset-instances/AI-D4-BB-SeaWaterPump")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "dependency_unavailable"
 
 
 def test_core_unavailability_is_bounded() -> None:
