@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -54,20 +56,40 @@ class FakeCore:
             return CoreResult(status, error_payload(status))
         if self.mode == "malformed":
             return CoreResult(200, {"data": {"type": "asset_instance"}})
+        if self.mode == "wrong_detail_id":
+            payload = copy.deepcopy(DETAIL)
+            payload["data"]["id"] = "AI-WRONG"
+            return CoreResult(200, payload)
+        if self.mode == "malformed_error":
+            return CoreResult(404, {"error": {"code": 404, "message": "bad"}})
+        if self.mode == "unexpected_status":
+            return CoreResult(418, error_payload(418))
         if self.mode == "timeout":
             raise CoreContractError("core_unavailable")
         return CoreResult(200, DETAIL)
 
     def graph(self, public_id: str) -> CoreResult:
         self.calls.append(("graph", public_id))
+        if self.mode == "wrong_graph_root":
+            payload = copy.deepcopy(GRAPH)
+            payload["data"]["rootId"] = "AI-WRONG"
+            return CoreResult(200, payload)
         return CoreResult(200, GRAPH)
 
     def resolve_asset_instance(self, context_public_id: str, asset_public_id: str) -> CoreResult:
         self.calls.append(("resolve", context_public_id, asset_public_id))
+        if self.mode == "wrong_resolution_context":
+            payload = copy.deepcopy(RESOLVED)
+            payload["meta"]["resolution"]["contextId"] = "AI-WRONG"
+            return CoreResult(200, payload)
         return CoreResult(200, RESOLVED)
 
     def object_detail(self, public_id: str) -> CoreResult:
         self.calls.append(("object", public_id))
+        if self.mode == "wrong_object_id":
+            payload = copy.deepcopy(SYSTEM)
+            payload["data"]["id"] = "SYS-WRONG"
+            return CoreResult(200, payload)
         return CoreResult(200, SYSTEM)
 
 
@@ -125,10 +147,25 @@ def test_bounded_core_errors_are_mapped_deterministically(status: int) -> None:
     assert response.json()["error"]["code"] == f"core_{status}"
 
 
-def test_malformed_core_payload_fails_closed() -> None:
+@pytest.mark.parametrize(
+    ("mode", "path"),
+    [
+        ("malformed", "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump"),
+        ("wrong_detail_id", "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump"),
+        ("wrong_graph_root", "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump/graph?depth=1"),
+        (
+            "wrong_resolution_context",
+            "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump/resolve-asset/ASSET-D4-SEAWATER-FILTER",
+        ),
+        ("wrong_object_id", "/api/v1/objects/SYS-0003"),
+        ("malformed_error", "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump"),
+        ("unexpected_status", "/api/v1/asset-instances/AI-D4-BB-SeaWaterPump"),
+    ],
+)
+def test_malformed_or_mismatched_core_responses_fail_closed(mode: str, path: str) -> None:
     fake = FakeCore()
-    fake.mode = "malformed"
-    response = client_for(fake).get("/api/v1/asset-instances/AI-D4-BB-SeaWaterPump")
+    fake.mode = mode
+    response = client_for(fake).get(path)
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "dependency_contract_violation"
 
