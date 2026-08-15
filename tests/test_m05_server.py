@@ -43,12 +43,6 @@ class FakeCore:
         self.calls: list[tuple[str, ...]] = []
         self.mode = "ok"
 
-    def health(self) -> CoreResult:
-        self.calls.append(("health",))
-        if self.mode == "unavailable":
-            raise CoreContractError("core_unavailable")
-        return CoreResult(200, {"status": "ok"})
-
     def asset_instance_detail(self, public_id: str) -> CoreResult:
         self.calls.append(("detail", public_id))
         if self.mode in {"400", "404", "409", "503"}:
@@ -86,6 +80,12 @@ class FakeCore:
 
     def object_detail(self, public_id: str) -> CoreResult:
         self.calls.append(("object", public_id))
+        if self.mode == "unavailable":
+            raise CoreContractError("core_unavailable")
+        if self.mode == "readiness_503":
+            return CoreResult(503, error_payload(503))
+        if self.mode == "readiness_malformed":
+            return CoreResult(200, {"data": {"id": "SYS-0003", "type": "system"}})
         if self.mode == "wrong_object_id":
             payload = copy.deepcopy(SYSTEM)
             payload["data"]["id"] = "SYS-WRONG"
@@ -105,11 +105,36 @@ def test_liveness_has_no_core_dependency() -> None:
     assert fake.calls == []
 
 
-def test_readiness_checks_core_but_not_db() -> None:
+def test_readiness_uses_existing_bounded_core_contract() -> None:
     fake = FakeCore()
     response = client_for(fake).get("/readyz")
     assert response.status_code == 200
-    assert fake.calls == [("health",)]
+    assert response.json() == {"service": "shaka-server", "status": "ready"}
+    assert fake.calls == [("object", "SYS-0003")]
+
+
+def test_readiness_maps_core_unavailable_fail_closed() -> None:
+    fake = FakeCore()
+    fake.mode = "unavailable"
+    response = client_for(fake).get("/readyz")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "dependency_unavailable"
+
+
+def test_readiness_maps_non_200_core_result_to_unavailable() -> None:
+    fake = FakeCore()
+    fake.mode = "readiness_503"
+    response = client_for(fake).get("/readyz")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "dependency_unavailable"
+
+
+def test_readiness_rejects_malformed_success_payload() -> None:
+    fake = FakeCore()
+    fake.mode = "readiness_malformed"
+    response = client_for(fake).get("/readyz")
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dependency_contract_violation"
 
 
 def test_four_bounded_gateway_operations() -> None:
@@ -174,14 +199,6 @@ def test_core_timeout_is_bounded_unavailable() -> None:
     fake = FakeCore()
     fake.mode = "timeout"
     response = client_for(fake).get("/api/v1/asset-instances/AI-D4-BB-SeaWaterPump")
-    assert response.status_code == 503
-    assert response.json()["error"]["code"] == "dependency_unavailable"
-
-
-def test_core_unavailability_is_bounded() -> None:
-    fake = FakeCore()
-    fake.mode = "unavailable"
-    response = client_for(fake).get("/readyz")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "dependency_unavailable"
 
