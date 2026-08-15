@@ -20,7 +20,9 @@ def _valid(public_id: str) -> bool:
     return bool(PUBLIC_ID.fullmatch(public_id))
 
 
-def _validate_success(payload: dict[str, Any], *, expected_type: str | None = None) -> None:
+def _validate_success(
+    payload: dict[str, Any], *, expected_type: str | None = None, expected_id: str | None = None
+) -> None:
     data = payload.get("data")
     meta = payload.get("meta")
     if not isinstance(data, dict) or not isinstance(meta, dict):
@@ -29,14 +31,18 @@ def _validate_success(payload: dict[str, Any], *, expected_type: str | None = No
         raise CoreContractError("malformed_core_response")
     if expected_type is not None and data.get("type") != expected_type:
         raise CoreContractError("malformed_core_response")
+    if expected_id is not None and data.get("id") != expected_id:
+        raise CoreContractError("malformed_core_response")
 
 
-def _validate_graph(payload: dict[str, Any]) -> None:
+def _validate_graph(payload: dict[str, Any], *, expected_root_id: str) -> None:
     data = payload.get("data")
     meta = payload.get("meta")
     if not isinstance(data, dict) or not isinstance(meta, dict):
         raise CoreContractError("malformed_core_response")
     if meta.get("schemaVersion") != "1.0" or meta.get("depth") != 1:
+        raise CoreContractError("malformed_core_response")
+    if data.get("rootId") != expected_root_id:
         raise CoreContractError("malformed_core_response")
     if not isinstance(data.get("nodes"), list) or not isinstance(data.get("edges"), list):
         raise CoreContractError("malformed_core_response")
@@ -47,7 +53,12 @@ def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None])
         validator(result.payload)
         return JSONResponse(result.payload, status_code=200)
     if result.status_code in {400, 404, 409, 503}:
-        if not isinstance(result.payload.get("error"), dict):
+        error = result.payload.get("error")
+        if (
+            not isinstance(error, dict)
+            or not isinstance(error.get("code"), str)
+            or not isinstance(error.get("message"), str)
+        ):
             raise CoreContractError("malformed_core_response")
         return JSONResponse(result.payload, status_code=result.status_code)
     raise CoreContractError("unexpected_core_status")
@@ -86,14 +97,19 @@ def create_app(*, core_base_url: str | None = None, core_client: CoreClient | No
             return _error("invalid_request", "Invalid public ID", 400)
         return _map_result(
             core_client.asset_instance_detail(public_id),
-            lambda payload: _validate_success(payload, expected_type="asset_instance"),
+            lambda payload: _validate_success(
+                payload, expected_type="asset_instance", expected_id=public_id
+            ),
         )
 
     @app.get("/api/v1/asset-instances/{public_id}/graph")
     def graph(public_id: str, depth: int | None = None) -> JSONResponse:
         if not _valid(public_id) or depth != 1:
             return _error("invalid_request", "public ID and depth=1 are required", 400)
-        return _map_result(core_client.graph(public_id), _validate_graph)
+        return _map_result(
+            core_client.graph(public_id),
+            lambda payload: _validate_graph(payload, expected_root_id=public_id),
+        )
 
     @app.get("/api/v1/asset-instances/{context_public_id}/resolve-asset/{asset_public_id}")
     def resolve_asset(context_public_id: str, asset_public_id: str) -> JSONResponse:
@@ -104,6 +120,12 @@ def create_app(*, core_base_url: str | None = None, core_client: CoreClient | No
             _validate_success(payload, expected_type="asset_instance")
             resolution = payload.get("meta", {}).get("resolution")
             if not isinstance(resolution, dict):
+                raise CoreContractError("malformed_core_response")
+            if (
+                resolution.get("contextId") != context_public_id
+                or resolution.get("assetId") != asset_public_id
+                or resolution.get("strategy") != "same_host_slot_current_installed"
+            ):
                 raise CoreContractError("malformed_core_response")
 
         return _map_result(
@@ -117,7 +139,7 @@ def create_app(*, core_base_url: str | None = None, core_client: CoreClient | No
             return _error("invalid_request", "Invalid public ID", 400)
 
         def validator(payload: dict[str, Any]) -> None:
-            _validate_success(payload)
+            _validate_success(payload, expected_id=public_id)
             if payload["data"].get("type") not in {"system", "location"}:
                 raise CoreContractError("malformed_core_response")
 
