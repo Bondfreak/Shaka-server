@@ -5,12 +5,14 @@ import re
 from typing import Any, Callable
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .core_client import CoreClient, CoreContractError, CoreResult
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 READINESS_OBJECT_ID = "SYS-0003"
+DEFAULT_UI_ORIGIN = "https://bondfreak.github.io"
 
 
 def _error(code: str, message: str, status_code: int) -> JSONResponse:
@@ -19,6 +21,16 @@ def _error(code: str, message: str, status_code: int) -> JSONResponse:
 
 def _valid(public_id: str) -> bool:
     return bool(PUBLIC_ID.fullmatch(public_id))
+
+
+def _resolve_cors_origins(configured: str | None) -> list[str]:
+    raw = configured if configured is not None else os.getenv("SHAKA_UI_ORIGINS", DEFAULT_UI_ORIGIN)
+    origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+    if not origins:
+        raise RuntimeError("At least one SHAKA_UI_ORIGINS origin is required")
+    if "*" in origins:
+        raise RuntimeError("Wildcard SHAKA_UI_ORIGINS is not allowed")
+    return origins
 
 
 def _validate_success(
@@ -65,7 +77,12 @@ def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None])
     raise CoreContractError("unexpected_core_status")
 
 
-def create_app(*, core_base_url: str | None = None, core_client: CoreClient | None = None) -> FastAPI:
+def create_app(
+    *,
+    core_base_url: str | None = None,
+    core_client: CoreClient | None = None,
+    cors_origins: str | None = None,
+) -> FastAPI:
     if core_client is None:
         resolved_url = core_base_url or os.getenv("SHAKA_CORE_BASE_URL")
         if not resolved_url:
@@ -74,6 +91,13 @@ def create_app(*, core_base_url: str | None = None, core_client: CoreClient | No
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.core_client = core_client
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_resolve_cors_origins(cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET"],
+        allow_headers=["Accept"],
+    )
 
     @app.exception_handler(CoreContractError)
     async def core_contract_error_handler(_, exc: CoreContractError) -> JSONResponse:
