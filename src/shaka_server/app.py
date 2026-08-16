@@ -9,6 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .core_client import CoreClient, CoreContractError, CoreResult
+from .kai import (
+    DisabledKaiProvider,
+    KaiProvider,
+    KaiProviderContractError,
+    KaiProviderUnavailable,
+    KaiService,
+    KaiToolDispatcher,
+    KaiToolError,
+)
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 READINESS_OBJECT_ID = "SYS-0003"
@@ -82,6 +91,7 @@ def create_app(
     core_base_url: str | None = None,
     core_client: CoreClient | None = None,
     cors_origins: str | None = None,
+    kai_provider: KaiProvider | None = None,
 ) -> FastAPI:
     if core_client is None:
         resolved_url = core_base_url or os.getenv("SHAKA_CORE_BASE_URL")
@@ -89,14 +99,20 @@ def create_app(
             raise RuntimeError("SHAKA_CORE_BASE_URL is required")
         core_client = CoreClient(resolved_url)
 
+    kai_service = KaiService(
+        dispatcher=KaiToolDispatcher(core_client),
+        provider=kai_provider or DisabledKaiProvider(),
+    )
+
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.core_client = core_client
+    app.state.kai_service = kai_service
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_resolve_cors_origins(cors_origins),
         allow_credentials=False,
-        allow_methods=["GET"],
-        allow_headers=["Accept"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Accept", "Content-Type"],
     )
 
     @app.exception_handler(CoreContractError)
@@ -170,6 +186,26 @@ def create_app(
                 raise CoreContractError("malformed_core_response")
 
         return _map_result(core_client.object_detail(public_id), validator)
+
+    @app.post("/api/v1/kai/explain")
+    def kai_explain(payload: dict[str, Any]) -> JSONResponse:
+        if set(payload) != {"contextInstanceId", "intent"}:
+            return _error("invalid_request", "Bounded KAI request fields are required", 400)
+        context_instance_id = payload.get("contextInstanceId")
+        if not isinstance(context_instance_id, str) or not _valid(context_instance_id):
+            return _error("invalid_request", "Invalid context instance ID", 400)
+        if payload.get("intent") != "explain_selected_context":
+            return _error("unsupported_request", "Unsupported KAI request", 400)
+
+        try:
+            result = kai_service.explain(context_instance_id)
+        except KaiProviderUnavailable:
+            return _error("kai_unavailable", "KAI model provider unavailable", 503)
+        except KaiToolError as exc:
+            return _error(exc.code, exc.message, exc.status_code)
+        except KaiProviderContractError:
+            return _error("kai_contract_violation", "KAI provider contract violation", 502)
+        return JSONResponse(result, status_code=200)
 
     return app
 
