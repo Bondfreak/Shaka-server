@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 
 from .core_client import CoreClient, CoreContractError, CoreResult
 from .kai import (
-    DisabledKaiProvider,
     KaiProvider,
     KaiProviderContractError,
     KaiProviderUnavailable,
@@ -18,6 +17,7 @@ from .kai import (
     KaiToolDispatcher,
     KaiToolError,
 )
+from .openai_provider import provider_from_env
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 READINESS_OBJECT_ID = "SYS-0003"
@@ -101,7 +101,7 @@ def create_app(
 
     kai_service = KaiService(
         dispatcher=KaiToolDispatcher(core_client),
-        provider=kai_provider or DisabledKaiProvider(),
+        provider=kai_provider if kai_provider is not None else provider_from_env(),
     )
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
