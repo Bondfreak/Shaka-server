@@ -24,9 +24,9 @@ def test_unlisted_origin_is_not_authorized() -> None:
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_preflight_is_get_only_for_allowed_origin() -> None:
+def test_preflight_allows_bounded_get_and_kai_post_for_allowed_origin() -> None:
     client = TestClient(create_app(core_client=object(), cors_origins=ALLOWED_ORIGIN))
-    response = client.options(
+    get_response = client.options(
         "/api/v1/objects/SYS-0003",
         headers={
             "Origin": ALLOWED_ORIGIN,
@@ -34,9 +34,21 @@ def test_preflight_is_get_only_for_allowed_origin() -> None:
             "Access-Control-Request-Headers": "Accept",
         },
     )
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
-    assert "GET" in response.headers["access-control-allow-methods"]
+    assert get_response.status_code == 200
+    assert get_response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    assert "GET" in get_response.headers["access-control-allow-methods"]
+
+    post_response = client.options(
+        "/api/v1/kai/explain",
+        headers={
+            "Origin": ALLOWED_ORIGIN,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+    assert post_response.status_code == 200
+    assert post_response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    assert "POST" in post_response.headers["access-control-allow-methods"]
 
 
 def test_wildcard_origin_configuration_fails_closed() -> None:
