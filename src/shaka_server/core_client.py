@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,19 +18,47 @@ class CoreResult:
 
 
 class CoreClient:
-    def __init__(self, base_url: str, *, timeout_seconds: float = 3.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        timeout_seconds: float = 20.0,
+        retry_delay_seconds: float = 5.0,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
+        self._retry_delay = retry_delay_seconds
+
+    def _request(self, path: str) -> httpx.Response:
+        return httpx.get(
+            f"{self._base_url}{path}",
+            timeout=self._timeout,
+            follow_redirects=False,
+        )
 
     def _get(self, path: str) -> CoreResult:
-        try:
-            response = httpx.get(
-                f"{self._base_url}{path}",
-                timeout=self._timeout,
-                follow_redirects=False,
-            )
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
-            raise CoreContractError("core_unavailable") from exc
+        response: httpx.Response | None = None
+        last_transport_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = self._request(path)
+                last_transport_error = None
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                last_transport_error = exc
+                response = None
+
+            transient_status = response is not None and response.status_code in {502, 503, 504}
+            if attempt == 0 and (last_transport_error is not None or transient_status):
+                time.sleep(self._retry_delay)
+                continue
+            break
+
+        if last_transport_error is not None or response is None:
+            raise CoreContractError("core_unavailable") from last_transport_error
+
+        if response.status_code in {502, 504}:
+            raise CoreContractError("core_unavailable")
 
         if response.status_code not in {200, 400, 404, 409, 503}:
             raise CoreContractError("unexpected_core_status")
