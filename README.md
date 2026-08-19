@@ -1,17 +1,19 @@
 # Shaka Server
 
-Shaka Server is the application-server component in the Shakai architecture.
+Shaka Server is Navigator's application-server component. In the accepted runtime architecture, Navigator UI contains Atlas (visual application/UX) and KAI (AI/agent layer), while Shaka Server provides the bounded application boundary toward Shaka Core.
 
-For SIP-M05 it is intentionally limited to a bounded, read-only HTTP gateway to already accepted Shaka Core contracts.
+The service remains intentionally bounded: normal domain reads flow through Shaka Server to Shaka Core, and KAI may use only explicitly exposed Server-controlled tools. Shaka Core remains authoritative for domain facts; Shaka Server does not access Shaka DB directly.
 
-## M05 boundaries
+## Current boundaries
 
-- no direct Core DB / Neon access
+- no direct Shaka DB / Neon access
 - no generic proxying or arbitrary Core paths
-- no GPT integration
-- no Shaka UI migration
-- no writes
+- bounded KAI integration only through explicit Server routes/tools
+- no database writes
 - fail closed on malformed or unexpected Core behavior
+- explicit, bounded browser CORS policy
+
+Historical SIP-M05/M06/M08 activity records remain the authoritative evidence for how these capabilities were introduced and accepted; their historical terminology and identifiers are not rewritten here.
 
 ## Local development
 
