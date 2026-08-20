@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any, Callable
@@ -20,8 +21,12 @@ from .kai import (
 from .openai_provider import provider_from_env
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+KAI_PROVIDER_REASON = re.compile(
+    r"^(?:kai_provider_not_configured|openai_transport_unavailable|openai_http_[1-5][0-9]{2})$"
+)
 READINESS_OBJECT_ID = "SYS-0003"
 DEFAULT_UI_ORIGIN = "https://bondfreak.github.io"
+logger = logging.getLogger(__name__)
 
 
 def _error(code: str, message: str, status_code: int) -> JSONResponse:
@@ -30,6 +35,13 @@ def _error(code: str, message: str, status_code: int) -> JSONResponse:
 
 def _valid(public_id: str) -> bool:
     return bool(PUBLIC_ID.fullmatch(public_id))
+
+
+def _safe_kai_provider_reason(exc: KaiProviderUnavailable) -> str:
+    reason = str(exc)
+    if KAI_PROVIDER_REASON.fullmatch(reason):
+        return reason
+    return "kai_provider_unavailable"
 
 
 def _resolve_cors_origins(configured: str | None) -> list[str]:
@@ -199,7 +211,8 @@ def create_app(
 
         try:
             result = kai_service.explain(context_instance_id)
-        except KaiProviderUnavailable:
+        except KaiProviderUnavailable as exc:
+            logger.warning("kai_provider_unavailable reason=%s", _safe_kai_provider_reason(exc))
             return _error("kai_unavailable", "KAI model provider unavailable", 503)
         except KaiToolError as exc:
             return _error(exc.code, exc.message, exc.status_code)
