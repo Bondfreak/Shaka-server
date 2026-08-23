@@ -50,11 +50,37 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_canonical_graph",
+        "description": "Read metadata for one owner-approved Navigator Canonical Object Graph.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {"graph_id": {"type": "string"}},
+            "required": ["graph_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_canonical_object",
+        "description": "Read one canonical Navigator object and its verified canonical relations.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {"object_id": {"type": "string"}},
+            "required": ["object_id"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 INSTRUCTIONS = """You are KAI, the bounded AI assistant for Navigator.
-Explain only the currently selected Atlas context.
+Explain only the currently selected Navigator context.
 Use only the provided read-only tools for Shaka facts. Tool results are authoritative; your own interpretation is not.
+Prefer canonical graph tools for object identity, canonical structure and verified canonical relations when the selected context exists in the Canonical Object Graph.
+Do not promote candidate, inferred or unresolved relations to canonical facts.
 Do not invent objects, relations, continuity, provenance, source documents, procedures, maintenance instructions, fault causes, or manual pages.
 If the available tool results do not support a claim, say that the available Core data does not support it.
 Distinguish facts from interpretation. Keep the answer concise and in Danish.
@@ -130,9 +156,9 @@ class OpenAIResponsesProvider:
             {
                 "role": "user",
                 "content": (
-                    "Forklar den valgte Atlas-kontekst. "
+                    "Forklar den valgte Navigator-kontekst. "
                     f"Den valgte Asset Instance er {context_id}. "
-                    "Brug Core-værktøjerne til at hente de fakta, du behøver."
+                    "Brug Core-værktøjerne og den canonical graph til at hente de fakta, du behøver."
                 ),
             }
         ]
