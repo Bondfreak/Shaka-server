@@ -70,6 +70,35 @@ def _validate_graph(payload: dict[str, Any], *, expected_root_id: str) -> None:
         raise CoreContractError("malformed_core_response")
 
 
+def _validate_cog_graph(payload: dict[str, Any], *, expected_graph_id: str) -> None:
+    _validate_success(payload, expected_id=expected_graph_id)
+    data = payload["data"]
+    if data.get("status") != "canonical":
+        raise CoreContractError("malformed_core_response")
+    for key in ("objectCount", "relationCount", "deferredCandidateCount"):
+        if not isinstance(data.get(key), int) or data[key] < 0:
+            raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("sourcePath"), str):
+        raise CoreContractError("malformed_core_response")
+
+
+def _validate_cog_object(payload: dict[str, Any], *, expected_object_id: str) -> None:
+    _validate_success(payload, expected_id=expected_object_id)
+    data = payload["data"]
+    meta = payload["meta"]
+    if not isinstance(data.get("type"), str) or not isinstance(data.get("label"), str):
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("relations"), list) or not isinstance(meta.get("graphId"), str):
+        raise CoreContractError("malformed_core_response")
+    for relation in data["relations"]:
+        if (
+            not isinstance(relation, dict)
+            or relation.get("status") != "verified"
+            or not all(isinstance(relation.get(key), str) for key in ("from", "type", "to"))
+        ):
+            raise CoreContractError("malformed_core_response")
+
+
 def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None]) -> JSONResponse:
     if result.status_code == 200:
         validator(result.payload)
@@ -186,6 +215,24 @@ def create_app(
                 raise CoreContractError("malformed_core_response")
 
         return _map_result(core_client.object_detail(public_id), validator)
+
+    @app.get("/api/v1/cog/graphs/{graph_id}")
+    def cog_graph(graph_id: str) -> JSONResponse:
+        if not _valid(graph_id):
+            return _error("invalid_request", "Invalid graph ID", 400)
+        return _map_result(
+            core_client.cog_graph(graph_id),
+            lambda payload: _validate_cog_graph(payload, expected_graph_id=graph_id),
+        )
+
+    @app.get("/api/v1/cog/objects/{public_id}")
+    def cog_object(public_id: str) -> JSONResponse:
+        if not _valid(public_id):
+            return _error("invalid_request", "Invalid public ID", 400)
+        return _map_result(
+            core_client.cog_object(public_id),
+            lambda payload: _validate_cog_object(payload, expected_object_id=public_id),
+        )
 
     @app.post("/api/v1/kai/explain")
     def kai_explain(payload: dict[str, Any]) -> JSONResponse:
