@@ -96,3 +96,6 @@ class CoreClient:
 
     def cog_object(self, public_id: str) -> CoreResult:
         return self._get(f"/api/v1/cog/objects/{public_id}")
+
+    def cog_flow(self, circuit_id: str) -> CoreResult:
+        return self._get(f"/api/v1/cog/flows/{circuit_id}")
