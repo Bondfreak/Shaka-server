@@ -11,6 +11,8 @@ SUPPORTED_TOOLS = {
     "get_asset_instance_detail",
     "get_direct_relations",
     "get_object_detail",
+    "get_canonical_graph",
+    "get_canonical_object",
 }
 
 
@@ -80,6 +82,37 @@ def _validate_success(
     return result.payload
 
 
+def _validate_cog_graph(result: CoreResult, graph_id: str) -> dict[str, Any]:
+    payload = _validate_success(result, expected_id=graph_id)
+    data = payload["data"]
+    if data.get("status") != "canonical":
+        raise CoreContractError("malformed_core_response")
+    for key in ("objectCount", "relationCount", "deferredCandidateCount"):
+        if not isinstance(data.get(key), int) or data[key] < 0:
+            raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("sourcePath"), str):
+        raise CoreContractError("malformed_core_response")
+    return payload
+
+
+def _validate_cog_object(result: CoreResult, object_id: str) -> dict[str, Any]:
+    payload = _validate_success(result, expected_id=object_id)
+    data = payload["data"]
+    meta = payload["meta"]
+    if not isinstance(data.get("type"), str) or not isinstance(data.get("label"), str):
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("relations"), list) or not isinstance(meta.get("graphId"), str):
+        raise CoreContractError("malformed_core_response")
+    for relation in data["relations"]:
+        if (
+            not isinstance(relation, dict)
+            or relation.get("status") != "verified"
+            or not all(isinstance(relation.get(key), str) for key in ("from", "type", "to"))
+        ):
+            raise CoreContractError("malformed_core_response")
+    return payload
+
+
 @dataclass(frozen=True)
 class KaiToolDispatcher:
     core_client: CoreClient
@@ -120,6 +153,18 @@ class KaiToolDispatcher:
             ):
                 raise CoreContractError("malformed_core_response")
             return result.payload
+
+        if name == "get_canonical_graph":
+            if set(arguments) != {"graph_id"} or not _valid(arguments.get("graph_id")):
+                raise KaiToolError("invalid_request", "Valid graph_id is required", 400)
+            graph_id = arguments["graph_id"]
+            return _validate_cog_graph(self.core_client.cog_graph(graph_id), graph_id)
+
+        if name == "get_canonical_object":
+            if set(arguments) != {"object_id"} or not _valid(arguments.get("object_id")):
+                raise KaiToolError("invalid_request", "Valid object_id is required", 400)
+            object_id = arguments["object_id"]
+            return _validate_cog_object(self.core_client.cog_object(object_id), object_id)
 
         if set(arguments) != {"object_id"} or not _valid(arguments.get("object_id")):
             raise KaiToolError("invalid_request", "Valid object_id is required", 400)
