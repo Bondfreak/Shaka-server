@@ -90,3 +90,9 @@ class CoreClient:
 
     def object_detail(self, public_id: str) -> CoreResult:
         return self._get(f"/api/v1/objects/{public_id}")
+
+    def cog_graph(self, graph_id: str) -> CoreResult:
+        return self._get(f"/api/v1/cog/graphs/{graph_id}")
+
+    def cog_object(self, public_id: str) -> CoreResult:
+        return self._get(f"/api/v1/cog/objects/{public_id}")
