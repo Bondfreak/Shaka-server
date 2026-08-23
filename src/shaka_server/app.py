@@ -99,6 +99,42 @@ def _validate_cog_object(payload: dict[str, Any], *, expected_object_id: str) ->
             raise CoreContractError("malformed_core_response")
 
 
+def _validate_cog_flow(payload: dict[str, Any], *, expected_circuit_id: str) -> None:
+    data = payload.get("data")
+    meta = payload.get("meta")
+    if not isinstance(data, dict) or not isinstance(meta, dict):
+        raise CoreContractError("malformed_core_response")
+    if meta.get("schemaVersion") != "1.0" or meta.get("projection") != "verified_directional_flow":
+        raise CoreContractError("malformed_core_response")
+    if data.get("circuitId") != expected_circuit_id:
+        raise CoreContractError("malformed_core_response")
+    if data.get("status") not in {"canonical_partial", "canonical_complete"}:
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("complete"), bool):
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("deferredCandidateCount"), int) or data["deferredCandidateCount"] < 0:
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("nodes"), list) or not isinstance(data.get("edges"), list):
+        raise CoreContractError("malformed_core_response")
+    node_ids = {
+        node.get("id")
+        for node in data["nodes"]
+        if isinstance(node, dict) and isinstance(node.get("id"), str)
+    }
+    if len(node_ids) != len(data["nodes"]):
+        raise CoreContractError("malformed_core_response")
+    for edge in data["edges"]:
+        if (
+            not isinstance(edge, dict)
+            or edge.get("status") != "verified"
+            or edge.get("type") != "supplies"
+            or not all(isinstance(edge.get(key), str) for key in ("from", "to"))
+            or edge["from"] not in node_ids
+            or edge["to"] not in node_ids
+        ):
+            raise CoreContractError("malformed_core_response")
+
+
 def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None]) -> JSONResponse:
     if result.status_code == 200:
         validator(result.payload)
@@ -232,6 +268,15 @@ def create_app(
         return _map_result(
             core_client.cog_object(public_id),
             lambda payload: _validate_cog_object(payload, expected_object_id=public_id),
+        )
+
+    @app.get("/api/v1/cog/flows/{circuit_id}")
+    def cog_flow(circuit_id: str) -> JSONResponse:
+        if not _valid(circuit_id):
+            return _error("invalid_request", "Invalid circuit ID", 400)
+        return _map_result(
+            core_client.cog_flow(circuit_id),
+            lambda payload: _validate_cog_flow(payload, expected_circuit_id=circuit_id),
         )
 
     @app.post("/api/v1/kai/explain")
