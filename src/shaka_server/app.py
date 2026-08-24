@@ -135,6 +135,56 @@ def _validate_cog_flow(payload: dict[str, Any], *, expected_circuit_id: str) -> 
             raise CoreContractError("malformed_core_response")
 
 
+def _validate_cog_topology(payload: dict[str, Any], *, expected_system_id: str) -> None:
+    data = payload.get("data")
+    meta = payload.get("meta")
+    if not isinstance(data, dict) or not isinstance(meta, dict):
+        raise CoreContractError("malformed_core_response")
+    if meta.get("schemaVersion") != "1.0" or meta.get("projection") != "verified_topology_with_deferred_candidates":
+        raise CoreContractError("malformed_core_response")
+    if data.get("systemId") != expected_system_id or data.get("status") not in {"canonical_partial", "canonical_complete"}:
+        raise CoreContractError("malformed_core_response")
+    if not isinstance(data.get("complete"), bool):
+        raise CoreContractError("malformed_core_response")
+    nodes = data.get("nodes")
+    edges = data.get("edges")
+    candidates = data.get("deferredCandidates")
+    if not isinstance(nodes, list) or not isinstance(edges, list) or not isinstance(candidates, list):
+        raise CoreContractError("malformed_core_response")
+    if data.get("deferredCandidateCount") != len(candidates):
+        raise CoreContractError("malformed_core_response")
+    node_ids = {
+        node.get("id")
+        for node in nodes
+        if isinstance(node, dict)
+        and isinstance(node.get("id"), str)
+        and isinstance(node.get("type"), str)
+        and isinstance(node.get("label"), str)
+    }
+    if len(node_ids) != len(nodes):
+        raise CoreContractError("malformed_core_response")
+    for edge in edges:
+        if (
+            not isinstance(edge, dict)
+            or edge.get("status") != "verified"
+            or not all(isinstance(edge.get(key), str) for key in ("from", "type", "to"))
+            or edge["from"] not in node_ids
+            or edge["to"] not in node_ids
+        ):
+            raise CoreContractError("malformed_core_response")
+    for edge in candidates:
+        if (
+            not isinstance(edge, dict)
+            or edge.get("status") != "candidate"
+            or not all(isinstance(edge.get(key), str) for key in ("from", "type", "to"))
+            or edge["from"] not in node_ids
+            or edge["to"] not in node_ids
+        ):
+            raise CoreContractError("malformed_core_response")
+    if meta.get("physicalCableRoutingVerified") is not False:
+        raise CoreContractError("malformed_core_response")
+
+
 def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None]) -> JSONResponse:
     if result.status_code == 200:
         validator(result.payload)
@@ -277,6 +327,15 @@ def create_app(
         return _map_result(
             core_client.cog_flow(circuit_id),
             lambda payload: _validate_cog_flow(payload, expected_circuit_id=circuit_id),
+        )
+
+    @app.get("/api/v1/cog/topologies/{system_id}")
+    def cog_topology(system_id: str) -> JSONResponse:
+        if not _valid(system_id):
+            return _error("invalid_request", "Invalid system ID", 400)
+        return _map_result(
+            core_client.cog_topology(system_id),
+            lambda payload: _validate_cog_topology(payload, expected_system_id=system_id),
         )
 
     @app.post("/api/v1/kai/explain")
