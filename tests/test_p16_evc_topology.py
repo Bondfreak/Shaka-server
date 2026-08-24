@@ -7,13 +7,21 @@ from shaka_server.core_client import CoreResult
 
 SYSTEM_ID = "SYS-EVC"
 GRAPH_ID = "NAV-COG-EVC-v0.1"
+PROJECTION = "verified_control_topology_with_explicit_deferred_candidates"
 
 
 class FakeCore:
-    def __init__(self, *, leak_verified_as_candidate: bool = False, leak_candidate_as_verified: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        leak_verified_as_candidate: bool = False,
+        leak_candidate_as_verified: bool = False,
+        projection: str = PROJECTION,
+    ) -> None:
         self.calls: list[tuple[str, str]] = []
         self.leak_verified_as_candidate = leak_verified_as_candidate
         self.leak_candidate_as_verified = leak_candidate_as_verified
+        self.projection = projection
 
     def cog_topology(self, system_id: str) -> CoreResult:
         self.calls.append(("cog_topology", system_id))
@@ -45,7 +53,7 @@ class FakeCore:
                 "meta": {
                     "schemaVersion": "1.0",
                     "sourceGraph": GRAPH_ID,
-                    "projection": "verified_topology_with_deferred_candidates",
+                    "projection": self.projection,
                     "physicalCableRoutingVerified": False,
                 },
             },
@@ -73,7 +81,7 @@ class FakeCore:
         raise AssertionError("not used")
 
 
-def test_server_proxies_bounded_evc_topology() -> None:
+def test_server_proxies_deployed_bounded_evc_topology_contract() -> None:
     fake = FakeCore()
     response = TestClient(create_app(core_client=fake)).get(f"/api/v1/cog/topologies/{SYSTEM_ID}")
     assert response.status_code == 200
@@ -81,8 +89,17 @@ def test_server_proxies_bounded_evc_topology() -> None:
     assert payload["data"]["status"] == "canonical_partial"
     assert payload["data"]["edges"][0]["status"] == "verified"
     assert payload["data"]["deferredCandidates"][0]["status"] == "candidate"
+    assert payload["meta"]["projection"] == PROJECTION
     assert payload["meta"]["physicalCableRoutingVerified"] is False
     assert fake.calls == [("cog_topology", SYSTEM_ID)]
+
+
+def test_server_rejects_obsolete_topology_projection_name() -> None:
+    response = TestClient(
+        create_app(core_client=FakeCore(projection="verified_topology_with_deferred_candidates"))
+    ).get(f"/api/v1/cog/topologies/{SYSTEM_ID}")
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "dependency_contract_violation"
 
 
 def test_server_fails_closed_if_verified_topology_edge_is_not_verified() -> None:
