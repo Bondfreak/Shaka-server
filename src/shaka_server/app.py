@@ -140,7 +140,11 @@ def _validate_cog_topology(payload: dict[str, Any], *, expected_system_id: str) 
     meta = payload.get("meta")
     if not isinstance(data, dict) or not isinstance(meta, dict):
         raise CoreContractError("malformed_core_response")
-    if meta.get("schemaVersion") != "1.0" or meta.get("projection") != "verified_topology_with_deferred_candidates":
+    if (
+        meta.get("schemaVersion") != "1.0"
+        or meta.get("projection")
+        != "verified_control_topology_with_explicit_deferred_candidates"
+    ):
         raise CoreContractError("malformed_core_response")
     if data.get("systemId") != expected_system_id or data.get("status") not in {"canonical_partial", "canonical_complete"}:
         raise CoreContractError("malformed_core_response")
