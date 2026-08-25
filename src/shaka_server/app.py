@@ -189,6 +189,59 @@ def _validate_cog_topology(payload: dict[str, Any], *, expected_system_id: str) 
         raise CoreContractError("malformed_core_response")
 
 
+def _validate_cog_diagnostic(payload: dict[str, Any], *, expected_scenario_id: str) -> None:
+    data = payload.get("data")
+    meta = payload.get("meta")
+    if not isinstance(data, dict) or not isinstance(meta, dict):
+        raise CoreContractError("malformed_core_response")
+    if (
+        meta.get("schemaVersion") != "1.0"
+        or meta.get("projection")
+        != "verified_diagnostic_anchors_with_explicit_candidate_investigation"
+        or meta.get("candidateRelationsPromoted") is not False
+        or meta.get("physicalCableRoutingVerified") is not False
+        or meta.get("diagnosticNature") != "scenario_template_not_root_cause_determination"
+    ):
+        raise CoreContractError("malformed_core_response")
+    if (
+        data.get("scenarioId") != expected_scenario_id
+        or data.get("status") != "diagnostic_bounded_partial"
+        or data.get("rootCauseDetermined") is not False
+    ):
+        raise CoreContractError("malformed_core_response")
+    symptom = data.get("symptom")
+    verified = data.get("verifiedAnchors")
+    deferred = data.get("deferredInvestigation")
+    excluded = data.get("notPrimaryForTotalNoWake")
+    if (
+        not isinstance(symptom, dict)
+        or not isinstance(symptom.get("label"), str)
+        or not isinstance(symptom.get("affectedDomainId"), str)
+        or not isinstance(verified, list)
+        or not isinstance(deferred, list)
+        or not isinstance(excluded, list)
+    ):
+        raise CoreContractError("malformed_core_response")
+    for item in verified:
+        if (
+            not isinstance(item, dict)
+            or item.get("status") != "verified"
+            or not isinstance(item.get("step"), int)
+            or not all(isinstance(item.get(key), str) for key in ("from", "type", "to", "meaning", "check"))
+        ):
+            raise CoreContractError("malformed_core_response")
+    for item in deferred:
+        if (
+            not isinstance(item, dict)
+            or item.get("status") != "candidate"
+            or not isinstance(item.get("priority"), int)
+            or not all(isinstance(item.get(key), str) for key in ("from", "type", "to", "meaning"))
+        ):
+            raise CoreContractError("malformed_core_response")
+    if any(not isinstance(item, str) for item in excluded):
+        raise CoreContractError("malformed_core_response")
+
+
 def _map_result(result: CoreResult, validator: Callable[[dict[str, Any]], None]) -> JSONResponse:
     if result.status_code == 200:
         validator(result.payload)
@@ -340,6 +393,15 @@ def create_app(
         return _map_result(
             core_client.cog_topology(system_id),
             lambda payload: _validate_cog_topology(payload, expected_system_id=system_id),
+        )
+
+    @app.get("/api/v1/cog/diagnostics/{scenario_id}")
+    def cog_diagnostic(scenario_id: str) -> JSONResponse:
+        if not _valid(scenario_id):
+            return _error("invalid_request", "Invalid scenario ID", 400)
+        return _map_result(
+            core_client.cog_diagnostic(scenario_id),
+            lambda payload: _validate_cog_diagnostic(payload, expected_scenario_id=scenario_id),
         )
 
     @app.post("/api/v1/kai/explain")
