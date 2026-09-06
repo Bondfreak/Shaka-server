@@ -20,17 +20,28 @@ Historical SIP-M05/M06/M08 activity records remain the authoritative evidence fo
 ```bash
 python -m pip install -e '.[test]'
 export SHAKA_CORE_BASE_URL=http://127.0.0.1:8001
-uvicorn shaka_server.app:app --reload
+uvicorn shaka_server.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Repository tests use a fake Core and do not require database access.
+
+CORS allowlist is `SHAKA_UI_ORIGINS` (comma-separated; no `*`). Defaults cover local Atlas ports and `https://bondfreak.github.io` (GitHub Pages for Bondfreak/atlas-ipad). See [docs/S4_RUNTIME.md](docs/S4_RUNTIME.md).
+
+### S4 F1 runtime smoke
+
+```bash
+python scripts/smoke_f1_runtime.py              # TestClient, ac-fixture-v1
+# with uvicorn running:
+python scripts/smoke_f1_runtime.py --mode http --base-url http://127.0.0.1:8000
+# or: make smoke-f1 / make smoke-f1-http
+```
 
 ## F1 schema / store / policy / retrieval / assets (T01–T05)
 
 `shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, deterministic Search/Retrieval + read-only Answer Composer, and Shaka Asset Instance bootstrap (BB/SB).
 
 - Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`, `assets`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md), [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md), [docs/GATE_C_PREVIEW_MANIFEST.md](docs/GATE_C_PREVIEW_MANIFEST.md) (owner preview freeze — not Gate C PASS)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md), [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md), [docs/GATE_C_PREVIEW_MANIFEST.md](docs/GATE_C_PREVIEW_MANIFEST.md) (owner preview freeze — not Gate C PASS), [docs/S4_RUNTIME.md](docs/S4_RUNTIME.md) (local uvicorn / CORS / smoke)
 - Tests: `tests/test_f1_*.py`
 - API: `answer_query(query, snapshot=...)` → structured Answer; `bootstrap_shaka_assets()` / `get_asset` / `list_assets`
 
