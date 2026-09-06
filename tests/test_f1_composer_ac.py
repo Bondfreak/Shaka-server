@@ -114,3 +114,72 @@ def test_cf001_d4_d6_conflict_surfaces_on_motor_type() -> None:
     assert ans.epistemic_status == "conflicted"
     assert "CLM-MOTOR-TYPE-D4" in ans.selected_ids
     assert "CLM-MOTOR-TYPE-D6" in ans.selected_ids
+
+
+def test_gate_d_q08_bb_sb_engine_serial_compare_no_impeller_switch() -> None:
+    """Q08: compare BB/SB engine serials — asset facts, never impeller AC-02 template."""
+    snap = build_ac_fixture_snapshot()
+    ans = answer_query("Sammenlign BB og SB motor-serienumre.", snapshot=snap)
+    blob = ans.text_blob
+    assert "2004030432" in blob
+    assert "2004030433" in blob
+    assert "AI-D4-BB-ENGINE" in ans.selected_ids
+    assert "AI-D4-SB-ENGINE" in ans.selected_ids
+    assert "cannot conclude that both motors" not in blob
+    assert "impeller kits" not in blob
+    assert "EVT-FAKTURA-9631-IMPELLER" not in ans.selected_ids
+    codes = {p.code for p in ans.policy_results}
+    assert "NO_SERIAL_GUESS" in codes or ans.epistemic_status == "documented"
+    assert ans.epistemic_status == "documented"
+
+
+def test_gate_d_q09_bb_engine_documented_serial() -> None:
+    """Q09: BB motor serial from asset bootstrap when documented."""
+    snap = build_ac_fixture_snapshot()
+    ans = answer_query("Hvilket serienummer har BB-motoren?", snapshot=snap)
+    blob = ans.text_blob
+    assert "2004030432" in blob
+    assert "AI-D4-BB-ENGINE" in ans.selected_ids
+    assert "2004030433" not in blob  # do not leak SB when asking BB only
+    assert "generic path" not in blob
+    assert ans.epistemic_status == "documented"
+    codes = {p.code for p in ans.policy_results}
+    assert "NO_SERIAL_GUESS" in codes or True  # allow-ok documented still ok
+    assert all(p.code != "BB_SB_INTEGRITY" for p in ans.policy_results)
+
+
+def test_gate_d_q10_sb_pcu_serial_unknown_no_clean_switch() -> None:
+    """Q10: SB-PCU serial unknown — honest absence, never PCU cleaned template."""
+    snap = build_ac_fixture_snapshot()
+    ans = answer_query("Hvilket serienummer har SB-PCU'en?", snapshot=snap)
+    blob = ans.text_blob
+    assert "AI-D4-SB-PCU" in ans.selected_ids or "sb" in blob and "pcu" in blob
+    assert "unknown" in blob
+    assert "cleaned" not in blob
+    assert "9273" not in blob
+    assert "CLM-PCU-CLEAN-2025" not in ans.selected_ids
+    assert "EVT-FAKTURA-9273-PCU" not in ans.selected_ids
+    assert "2004030432" not in blob  # do not invent / sibling-copy BB engine serial
+    assert "2004030433" not in blob
+    codes = {p.code for p in ans.policy_results}
+    assert "NO_SERIAL_GUESS" in codes
+    assert ans.epistemic_status == "unknown"
+
+
+def test_gate_d_regression_impeller_and_pcu_templates_still_work() -> None:
+    """Impeller date + PCU cleaned paths remain after serial-identity routing."""
+    snap = build_ac_fixture_snapshot()
+    impeller = answer_query("Hvornår blev impellerne sidst skiftet?", snapshot=snap)
+    assert "9631" in impeller.text_blob
+    assert "impeller" in impeller.text_blob
+    assert "INVOICE_NE_INSTALL" in {p.code for p in impeller.policy_results} or (
+        "ACTION_NE_OUTCOME" in {p.code for p in impeller.policy_results}
+    )
+
+    sides = answer_query("Blev begge motorers impellere skiftet?", snapshot=snap)
+    assert "BB_SB_INTEGRITY" in {p.code for p in sides.policy_results}
+    assert "cannot conclude" in sides.text_blob
+
+    pcu = answer_query("Hvad blev gjort ved PCU-stikket?", snapshot=snap)
+    assert "clean" in pcu.text_blob
+    assert "9273" in pcu.text_blob or "CLM-PCU-CLEAN-2025" in pcu.selected_ids

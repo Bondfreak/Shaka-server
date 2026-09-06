@@ -13,6 +13,7 @@ from shaka_server.f1.policy import (
     guard_conflict_must_surface,
     guard_hypothesis_not_root_cause,
     guard_invoice_not_install,
+    guard_no_serial_guess,
     guard_no_topic_switch,
 )
 from shaka_server.f1.policy.types import PolicyResult
@@ -108,6 +109,10 @@ def _detect_intent(query: str) -> str:
     pns = _PN_RE.findall(query)
     if FIXTURE_PART_ABSENT in pns or FIXTURE_PART_ABSENT in q:
         return "ac06_absence"
+    # Serial / asset identity BEFORE keyword service templates (impeller sides, PCU cleaned).
+    # Gate D: Q08/Q09/Q10 must not topic-switch to AC-02 / AC-03.
+    if _is_serial_identity_query(q):
+        return "serial_identity"
     if any(k in q for k in ("motor type", "motortype", "d4", "d6", "labour", "labor")) and (
         "9631" in q or "invoice" in q or "faktura" in q or "conflict" in q or "wording" in q
     ):
@@ -131,6 +136,54 @@ def _detect_intent(query: str) -> str:
     return "generic"
 
 
+def _is_serial_identity_query(q: str) -> bool:
+    """True when the query asks for serial / identity facts, not service actions."""
+    serial_keys = (
+        "serienummer",
+        "serienumre",
+        "serie nummer",
+        "serie-nummer",
+        "serial number",
+        "serial numbers",
+        "serials",
+        "serialnr",
+        "serial no",
+        "s/n",
+    )
+    if any(k in q for k in serial_keys):
+        return True
+    if re.search(r"\bserial\b", q):
+        return True
+    return False
+
+
+def _parse_asset_type(q: str) -> str | None:
+    """Map query component words to Asset.asset_type (engine/pcu/ips/impeller)."""
+    if any(k in q for k in ("impeller", "impellerne")):
+        return "impeller"
+    if "pcu" in q:
+        return "pcu"
+    if "ips" in q:
+        return "ips"
+    if any(k in q for k in ("motor", "engine", "motoren", "motorer", "motorerne")):
+        return "engine"
+    return None
+
+
+def _parse_side_scope(q: str) -> str:
+    """Return 'compare', 'BB', 'SB', or 'unknown' for serial/identity queries."""
+    has_bb = bool(re.search(r"\bbb\b", q)) or "bagbord" in q
+    has_sb = bool(re.search(r"\bsb\b", q)) or "styrbord" in q
+    compare_keys = ("sammenlign", "compare", "versus", " vs ", "bb og sb", "bb/sb", "begge")
+    if any(k in q for k in compare_keys) or (has_bb and has_sb):
+        return "compare"
+    if has_bb:
+        return "BB"
+    if has_sb:
+        return "SB"
+    return "unknown"
+
+
 def compose_answer(query: str, index: SnapshotIndex, snapshot: FixtureSnapshot) -> Answer:
     """Compose a structured answer from retrieval hits + Policy Guard."""
     intent = _detect_intent(query)
@@ -139,6 +192,8 @@ def compose_answer(query: str, index: SnapshotIndex, snapshot: FixtureSnapshot) 
 
     if intent == "ac06_absence":
         return _compose_ac06(query, index, snapshot, policies)
+    if intent == "serial_identity":
+        return _compose_serial_identity(query, index, snapshot, policies)
     if intent == "cf001_conflict":
         return _compose_cf001(query, index, snapshot, policies)
     if intent == "ac05_cause":
@@ -170,6 +225,134 @@ def compose_answer(query: str, index: SnapshotIndex, snapshot: FixtureSnapshot) 
         conclusion=conclusion,
         basis=basis,
         uncertainty_conflict=["Generic path — epistemic status remains unknown"],
+        sources=_source_refs(snapshot, selected),
+        epistemic_status=status,
+        policy_results=policies,
+        selected_ids=selected,
+        snapshot_id=snapshot.snapshot_id,
+    )
+    ans.audit = _audit(query, selected, policies, status, snapshot.snapshot_id)
+    return ans
+
+
+
+def _compose_serial_identity(
+    query: str,
+    index: SnapshotIndex,
+    snapshot: FixtureSnapshot,
+    policies: list[PolicyResult],
+) -> Answer:
+    """Answer serial/identity queries from Asset bootstrap facts — never invent."""
+    q = query.lower()
+    asset_type = _parse_asset_type(q) or "engine"
+    scope = _parse_side_scope(q)
+
+    candidates = [a for a in snapshot.assets if a.asset_type == asset_type]
+    if scope in {"BB", "SB"}:
+        candidates = [a for a in candidates if str(a.side) == scope]
+    elif scope == "compare":
+        candidates = [a for a in candidates if str(a.side) in {"BB", "SB"}]
+        candidates = sorted(
+            candidates,
+            key=lambda a: (0 if str(a.side) == "BB" else 1, a.id),
+        )
+    else:
+        candidates = sorted(candidates, key=lambda a: a.id)
+
+    selected: list[str] = [a.id for a in candidates]
+    hits = index.search(
+        query,
+        keywords=["serial", "serienummer", asset_type, "bb", "sb"],
+        limit=10,
+    )
+    for h in hits:
+        kind = getattr(h.entity, "kind", "") or h.kind
+        if kind == "Asset" and h.entity_id not in selected:
+            selected.append(h.entity_id)
+
+    lines: list[str] = []
+    basis: list[str] = []
+    uncertainty: list[str] = []
+    any_documented = False
+    any_unknown = False
+
+    if not candidates:
+        policies.append(guard_no_serial_guess("unknown", "blank"))
+        conclusion = (
+            f"No {asset_type} asset identity found in the frozen snapshot for this query. "
+            "Serial remains unknown — not invented."
+        )
+        uncertainty.append("Scoped asset search returned no matching Asset Instance")
+        status = EpistemicStatus.UNKNOWN.value
+    else:
+        for asset in candidates:
+            serial = str(asset.serial) if asset.serial is not None else "unknown"
+            if serial and serial != "unknown":
+                policies.append(guard_no_serial_guess(serial, "documented"))
+                any_documented = True
+                lines.append(
+                    f"{asset.side} {asset.asset_type} {asset.id}: serial={serial} "
+                    "(documented asset bootstrap)"
+                )
+                basis.append(
+                    f"Asset {asset.id}: side={asset.side}, serial={serial}, source=documented"
+                )
+            else:
+                policies.append(guard_no_serial_guess("unknown", "blank"))
+                any_unknown = True
+                lines.append(
+                    f"{asset.side} {asset.asset_type} {asset.id}: serial=unknown "
+                    "(not documented in asset bootstrap — not invented)"
+                )
+                basis.append(f"Asset {asset.id}: side={asset.side}, serial=unknown")
+                uncertainty.append(
+                    f"Serial for {asset.id} is unknown; refusing guess or sibling inference"
+                )
+
+        basis.append("Policy: NO_SERIAL_GUESS — only documented asset serials")
+        basis.append(
+            "Routed via serial_identity — not service-action templates (impeller/PCU)"
+        )
+
+        if scope == "compare" and len(candidates) >= 2:
+            conclusion = (
+                "BB vs SB serial identity from asset bootstrap: "
+                + "; ".join(lines)
+                + "."
+            )
+        elif len(lines) == 1:
+            conclusion = lines[0] + "."
+        else:
+            conclusion = "Asset serial identity: " + "; ".join(lines) + "."
+
+        if any_documented and not any_unknown:
+            status = EpistemicStatus.DOCUMENTED.value
+        elif any_documented and any_unknown:
+            status = EpistemicStatus.UNKNOWN.value
+            uncertainty.append("Mixed documented/unknown serials across requested sides")
+        else:
+            status = EpistemicStatus.UNKNOWN.value
+
+    forbidden = ("impeller kits", "cleaned (faktura", "both motors' impellers")
+    low = conclusion.lower()
+    if any(f in low for f in forbidden):
+        conclusion = "Serial identity path refused service-template topic switch."
+        policies.append(guard_no_topic_switch("serial_identity", "service_template"))
+
+    for p in policies:
+        if (
+            p.verdict in {"downgrade", "reject"}
+            and p.epistemic_status is not None
+            and _status_value(p.epistemic_status) == EpistemicStatus.UNKNOWN.value
+        ):
+            status = EpistemicStatus.UNKNOWN.value
+
+    ans = Answer(
+        query=query,
+        conclusion=conclusion,
+        basis=basis,
+        uncertainty_conflict=uncertainty
+        or ["Serial identity scoped to Asset Instance facts only"],
         sources=_source_refs(snapshot, selected),
         epistemic_status=status,
         policy_results=policies,
