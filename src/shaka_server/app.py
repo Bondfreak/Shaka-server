@@ -22,7 +22,23 @@ from .f1.http import router as f1_router
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 READINESS_OBJECT_ID = "SYS-0003"
-DEFAULT_UI_ORIGIN = "https://bondfreak.github.io"
+# Comma-separated allowlist. Atlas (Bondfreak/atlas-ipad) on local http.server
+# and GitHub Pages share these origins; override via SHAKA_UI_ORIGINS.
+DEFAULT_UI_ORIGINS = ",".join(
+    [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://bondfreak.github.io",
+    ]
+)
+# Back-compat alias for imports/tests that referenced the old name.
+DEFAULT_UI_ORIGIN = DEFAULT_UI_ORIGINS
 
 
 def _error(code: str, message: str, status_code: int) -> JSONResponse:
@@ -34,7 +50,7 @@ def _valid(public_id: str) -> bool:
 
 
 def _resolve_cors_origins(configured: str | None) -> list[str]:
-    raw = configured if configured is not None else os.getenv("SHAKA_UI_ORIGINS", DEFAULT_UI_ORIGIN)
+    raw = configured if configured is not None else os.getenv("SHAKA_UI_ORIGINS", DEFAULT_UI_ORIGINS)
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
     if not origins:
         raise RuntimeError("At least one SHAKA_UI_ORIGINS origin is required")

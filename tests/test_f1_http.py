@@ -77,6 +77,7 @@ def test_answer_ac_style_query_returns_required_fields_and_no_install_promotion(
     ).lower()
     assert "not proof" in blob or "invoiced" in blob
     assert "installed on both" not in blob
+    assert body.get("snapshot_id") == "ac-fixture-v1"
 
 
 def test_assets_list_returns_bb_sb_engines() -> None:
