@@ -30,7 +30,7 @@ Repository tests use a fake Core and do not require database access.
 `shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, deterministic Search/Retrieval + read-only Answer Composer, and Shaka Asset Instance bootstrap (BB/SB).
 
 - Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`, `assets`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md), [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md), [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md), [docs/GATE_C_PREVIEW_MANIFEST.md](docs/GATE_C_PREVIEW_MANIFEST.md) (owner preview freeze — not Gate C PASS)
 - Tests: `tests/test_f1_*.py`
 - API: `answer_query(query, snapshot=...)` → structured Answer; `bootstrap_shaka_assets()` / `get_asset` / `list_assets`
 
