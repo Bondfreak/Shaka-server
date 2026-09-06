@@ -14,8 +14,8 @@ from shaka_server.f1.core.types import (
     Observation,
     Source,
 )
+from shaka_server.f1.assets.bootstrap import bootstrap_shaka_assets
 from shaka_server.f1.core.validators import (
-    validate_asset,
     validate_claim,
     validate_event,
     validate_evidence,
@@ -103,54 +103,26 @@ def build_ac_fixture_snapshot() -> FixtureSnapshot:
                 "scope": "EVC-C / D4-300",
             }
         ),
+        validate_knowledge_object(
+            {
+                "id": "KO-D4-0062",
+                "kind": "KnowledgeObject",
+                "title": "Engine identity / ID plate (D4-300D-C)",
+                "scope": "D4-300 / IPS400",
+            }
+        ),
+        validate_knowledge_object(
+            {
+                "id": "KO-D4-0103",
+                "kind": "KnowledgeObject",
+                "title": "Engine-to-IPS drive interface",
+                "scope": "D4-300 / IPS400",
+            }
+        ),
     ]
 
-    assets = [
-        validate_asset(
-            {
-                "id": "AI-D4-BB-ENGINE",
-                "kind": "Asset",
-                "vesselId": "shaka",
-                "side": "BB",
-                "assetType": "engine",
-                "koId": "KO-D4-0062",
-                "serial": FIXTURE_SERIALS["BB_ENGINE"],
-            }
-        ),
-        validate_asset(
-            {
-                "id": "AI-D4-SB-ENGINE",
-                "kind": "Asset",
-                "vesselId": "shaka",
-                "side": "SB",
-                "assetType": "engine",
-                "koId": "KO-D4-0062",
-                "serial": FIXTURE_SERIALS["SB_ENGINE"],
-            }
-        ),
-        validate_asset(
-            {
-                "id": "AI-D4-IMPELLER-KIT",
-                "kind": "Asset",
-                "vesselId": "shaka",
-                "side": "unknown",
-                "assetType": "impeller",
-                "koId": "KO-D4-0007",
-                "serial": "unknown",
-            }
-        ),
-        validate_asset(
-            {
-                "id": "AI-D4-BB-PCU",
-                "kind": "Asset",
-                "vesselId": "shaka",
-                "side": "BB",
-                "assetType": "pcu",
-                "koId": "KO-D4-0190",
-                "serial": "unknown",
-            }
-        ),
-    ]
+    # F1-T05: bootstrap vessel Asset Instances (Unknown-safe; BB/SB never merged).
+    assets = bootstrap_shaka_assets()
 
     sources = [
         validate_source(
@@ -556,6 +528,13 @@ def build_ac_fixture_snapshot() -> FixtureSnapshot:
         "AI-D4-BB-ENGINE": ["serial", FIXTURE_SERIALS["BB_ENGINE"], "bb", "engine"],
         "AI-D4-SB-ENGINE": ["serial", FIXTURE_SERIALS["SB_ENGINE"], "sb", "engine"],
         "AI-D4-IMPELLER-KIT": ["impeller", FIXTURE_PART_IMPELLER, "unknown", "side"],
+        "AI-D4-IMPELLER-CANDIDATE-A": ["impeller", "candidate", "unknown", "side"],
+        "AI-D4-IMPELLER-CANDIDATE-B": ["impeller", "candidate", "unknown", "side"],
+        "AI-D4-BB-IPS": ["ips", "bb", "drive"],
+        "AI-D4-SB-IPS": ["ips", "sb", "drive"],
+        "AI-D4-BB-PCU": ["pcu", "bb", "evc", "cf-003"],
+        "AI-D4-SB-PCU": ["pcu", "sb", "evc", "placeholder"],
+        "AI-SHAKA-VESSEL": ["vessel", "shaka", "nw370", "fly"],
         "SRC-FAKTURA-9631": ["9631", "faktura", "impeller", "source", FIXTURE_PART_IMPELLER],
         "SRC-FAKTURA-9273": ["9273", "faktura", "pcu", "evc", "source"],
         "KO-D4-0036": ["generatorrem", "belt", "generator", "21407028"],

@@ -25,14 +25,14 @@ uvicorn shaka_server.app:app --reload
 
 Repository tests use a fake Core and do not require database access.
 
-## F1 schema / store / policy / retrieval (T01–T04)
+## F1 schema / store / policy / retrieval / assets (T01–T05)
 
-`shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, and deterministic Search/Retrieval + read-only Answer Composer.
+`shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, deterministic Search/Retrieval + read-only Answer Composer, and Shaka Asset Instance bootstrap (BB/SB).
 
-- Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md)
+- Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`, `assets`)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md)
 - Tests: `tests/test_f1_*.py`
-- API: `answer_query(query, snapshot=...)` → structured Answer (Conclusion / Basis / Uncertainty / Sources) with Policy Guard
+- API: `answer_query(query, snapshot=...)` → structured Answer; `bootstrap_shaka_assets()` / `get_asset` / `list_assets`
 
-Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only. Frozen AC snapshot covers AC-01…06 (no LLM).
+Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only. Impeller side stays unknown (CF-002). Frozen AC snapshot covers AC-01…06 (no LLM).
 

@@ -1,5 +1,13 @@
-"""F1 Navigator schema, document store, policy, retrieval, and answer composer."""
+"""F1 Navigator schema, document store, policy, retrieval, composer, and assets."""
 
+from shaka_server.f1.assets import (
+    ASSET_IDS,
+    DOCUMENTED_SERIALS,
+    AssetRegistry,
+    bootstrap_shaka_assets,
+    get_asset,
+    list_assets,
+)
 from shaka_server.f1.composer import Answer, answer_query
 from shaka_server.f1.core import (
     EPISTEMIC_STATUSES,
@@ -34,6 +42,12 @@ from shaka_server.f1.snapshot import (
 from shaka_server.f1.store import DocumentStore
 
 __all__ = [
+    "ASSET_IDS",
+    "DOCUMENTED_SERIALS",
+    "AssetRegistry",
+    "bootstrap_shaka_assets",
+    "get_asset",
+    "list_assets",
     "SIDES",
     "EPISTEMIC_STATUSES",
     "ENTITY_KINDS",
