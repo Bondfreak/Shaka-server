@@ -18,6 +18,7 @@ from .kai import (
     KaiToolError,
 )
 from .openai_provider import provider_from_env
+from .f1.http import router as f1_router
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 READINESS_OBJECT_ID = "SYS-0003"
@@ -423,6 +424,8 @@ def create_app(
         except KaiProviderContractError:
             return _error("kai_contract_violation", "KAI provider contract violation", 502)
         return JSONResponse(result, status_code=200)
+
+    app.include_router(f1_router)
 
     return app
 
