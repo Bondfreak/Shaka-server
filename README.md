@@ -30,9 +30,19 @@ Repository tests use a fake Core and do not require database access.
 `shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, deterministic Search/Retrieval + read-only Answer Composer, and Shaka Asset Instance bootstrap (BB/SB).
 
 - Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`, `assets`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md)
 - Tests: `tests/test_f1_*.py`
 - API: `answer_query(query, snapshot=...)` → structured Answer; `bootstrap_shaka_assets()` / `get_asset` / `list_assets`
 
 Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only. Impeller side stays unknown (CF-002). Frozen AC snapshot covers AC-01…06 (no LLM).
+
+### F1 HTTP (read-only)
+
+Bounded routes included from `create_app` via `shaka_server.f1.http`:
+
+- `POST /api/v1/f1/answer` — `{ "query": "..." }` → structured Answer (frozen snapshot, no LLM)
+- `GET /api/v1/f1/assets` — optional `?side=`
+- `GET /api/v1/f1/assets/{asset_id}` — `404` if missing
+
+See [docs/F1_HTTP.md](docs/F1_HTTP.md).
 
