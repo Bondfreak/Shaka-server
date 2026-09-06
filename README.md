@@ -25,13 +25,14 @@ uvicorn shaka_server.app:app --reload
 
 Repository tests use a fake Core and do not require database access.
 
-## F1 schema / store / policy (T01–T03)
+## F1 schema / store / policy / retrieval (T01–T04)
 
-`shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, and Policy Guard v0.
+`shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, and deterministic Search/Retrieval + read-only Answer Composer.
 
-- Package: `src/shaka_server/f1/` (`core`, `store`, `policy`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md)
+- Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md)
 - Tests: `tests/test_f1_*.py`
+- API: `answer_query(query, snapshot=...)` → structured Answer (Conclusion / Basis / Uncertainty / Sources) with Policy Guard
 
-Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only.
+Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only. Frozen AC snapshot covers AC-01…06 (no LLM).
 
