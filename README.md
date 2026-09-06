@@ -30,7 +30,7 @@ Repository tests use a fake Core and do not require database access.
 `shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, Policy Guard v0, deterministic Search/Retrieval + read-only Answer Composer, and Shaka Asset Instance bootstrap (BB/SB).
 
 - Package: `src/shaka_server/f1/` (`core`, `store`, `policy`, `snapshot`, `retrieval`, `composer`, `assets`)
-- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md), [docs/F1_T04.md](docs/F1_T04.md), [docs/F1_T05.md](docs/F1_T05.md), [docs/F1_HTTP.md](docs/F1_HTTP.md), [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md)
 - Tests: `tests/test_f1_*.py`
 - API: `answer_query(query, snapshot=...)` → structured Answer; `bootstrap_shaka_assets()` / `get_asset` / `list_assets`
 
@@ -45,4 +45,8 @@ Bounded routes included from `create_app` via `shaka_server.f1.http`:
 - `GET /api/v1/f1/assets/{asset_id}` — `404` if missing
 
 See [docs/F1_HTTP.md](docs/F1_HTTP.md).
+
+### F1 KAI tool (read-only)
+
+KAI may call `f1_answer_query` (`query`: non-empty string) as a **Server-controlled** tool only. It wraps the same deterministic `answer_query` path as `POST /api/v1/f1/answer` — no Core DB, no writes, fail-closed. See [docs/F1_KAI_TOOL.md](docs/F1_KAI_TOOL.md).
 
