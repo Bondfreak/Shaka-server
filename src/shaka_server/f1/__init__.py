@@ -1,5 +1,6 @@
-"""F1 Navigator schema, document store, and policy guards (T01–T03)."""
+"""F1 Navigator schema, document store, policy, retrieval, and answer composer."""
 
+from shaka_server.f1.composer import Answer, answer_query
 from shaka_server.f1.core import (
     EPISTEMIC_STATUSES,
     ENTITY_KINDS,
@@ -20,6 +21,15 @@ from shaka_server.f1.policy import (
     guard_invoice_not_install,
     guard_no_serial_guess,
     guard_no_topic_switch,
+)
+from shaka_server.f1.retrieval import SnapshotIndex
+from shaka_server.f1.snapshot import (
+    FIXTURE_PART_ABSENT,
+    FIXTURE_PART_IMPELLER,
+    FIXTURE_SERIALS,
+    FixtureSnapshot,
+    build_ac_fixture_snapshot,
+    default_snapshot,
 )
 from shaka_server.f1.store import DocumentStore
 
@@ -42,4 +52,13 @@ __all__ = [
     "guard_no_serial_guess",
     "guard_bb_sb_integrity",
     "guard_no_topic_switch",
+    "SnapshotIndex",
+    "Answer",
+    "answer_query",
+    "FixtureSnapshot",
+    "build_ac_fixture_snapshot",
+    "default_snapshot",
+    "FIXTURE_SERIALS",
+    "FIXTURE_PART_IMPELLER",
+    "FIXTURE_PART_ABSENT",
 ]
