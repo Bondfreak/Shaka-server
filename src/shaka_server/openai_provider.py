@@ -74,12 +74,29 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "f1_answer_query",
+        "description": (
+            "Ask F1 Canonical Read Core a natural-language query. Returns a deterministic "
+            "structured Answer from the frozen snapshot (no LLM, no Core DB, no writes). "
+            "Use for impeller/PCU/invoice-vs-install style questions grounded in F1 evidence."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 INSTRUCTIONS = """You are KAI, the bounded AI assistant for Navigator.
 Explain only the currently selected Navigator context.
 Use only the provided read-only tools for Shaka facts. Tool results are authoritative; your own interpretation is not.
 Prefer canonical graph tools for object identity, canonical structure and verified canonical relations when the selected context exists in the Canonical Object Graph.
+Use f1_answer_query for F1 Canonical Read Core questions (impeller/PCU/invoice-vs-install); treat its structured Answer as authoritative F1 evidence.
 Do not promote candidate, inferred or unresolved relations to canonical facts.
 Do not invent objects, relations, continuity, provenance, source documents, procedures, maintenance instructions, fault causes, or manual pages.
 If the available tool results do not support a claim, say that the available Core data does not support it.

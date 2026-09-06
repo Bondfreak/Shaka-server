@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 from .core_client import CoreClient, CoreContractError, CoreResult
+from .f1.composer.api import answer_query
+from .f1.http import _to_jsonable
 
 PUBLIC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SUPPORTED_TOOLS = {
@@ -13,6 +15,7 @@ SUPPORTED_TOOLS = {
     "get_object_detail",
     "get_canonical_graph",
     "get_canonical_object",
+    "f1_answer_query",
 }
 
 
@@ -165,6 +168,15 @@ class KaiToolDispatcher:
                 raise KaiToolError("invalid_request", "Valid object_id is required", 400)
             object_id = arguments["object_id"]
             return _validate_cog_object(self.core_client.cog_object(object_id), object_id)
+
+        if name == "f1_answer_query":
+            if set(arguments) != {"query"}:
+                raise KaiToolError("invalid_request", "Non-empty query string is required", 400)
+            query = arguments.get("query")
+            if not isinstance(query, str) or not query.strip():
+                raise KaiToolError("invalid_request", "Non-empty query string is required", 400)
+            # Deterministic F1 composer; no Core client, no writes.
+            return _to_jsonable(answer_query(query.strip()))
 
         if set(arguments) != {"object_id"} or not _valid(arguments.get("object_id")):
             raise KaiToolError("invalid_request", "Valid object_id is required", 400)

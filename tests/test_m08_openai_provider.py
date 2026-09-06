@@ -126,6 +126,7 @@ def test_openai_provider_uses_only_allowlisted_function_tools_and_round_trip(mon
         "get_object_detail",
         "get_canonical_graph",
         "get_canonical_object",
+        "f1_answer_query",
     }
     assert all(tool["strict"] is True for tool in TOOLS)
     assert requests[1]["json"]["tool_choice"] == "auto"
