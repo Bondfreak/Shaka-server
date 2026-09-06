@@ -24,3 +24,14 @@ uvicorn shaka_server.app:app --reload
 ```
 
 Repository tests use a fake Core and do not require database access.
+
+## F1 schema / store / policy (T01–T03)
+
+`shaka_server.f1` ports Navigator F1 core types, a content-addressed document store, and Policy Guard v0.
+
+- Package: `src/shaka_server/f1/` (`core`, `store`, `policy`)
+- Docs: [docs/F1_T01_T03.md](docs/F1_T01_T03.md)
+- Tests: `tests/test_f1_*.py`
+
+Invariants: KO ≠ Asset; Source ≠ Evidence; never invent serials; BB/SB never merge; policy downgrades rather than silent prefer. Fixture serials BB `2004030432` / SB `2004030433` only.
+
